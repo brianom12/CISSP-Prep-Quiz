@@ -1,0 +1,56 @@
+
+<!-- Selection UI for CISSP Quiz -->
+<div id="selection-ui">
+  <h2>Select Questions to Practise</h2>
+  <form id="selectionForm">
+    <fieldset>
+      <legend>Domains (Chapters)</legend>
+      <label><input type="checkbox" name="chapter" value="Domain 1"> Domain 1: Security and Risk Management</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 2"> Domain 2: Asset Security</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 3"> Domain 3: Security Architecture and Engineering</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 4"> Domain 4: Communication and Network Security</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 5"> Domain 5: Identity and Access Management</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 6"> Domain 6: Security Assessment and Testing</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 7"> Domain 7: Security Operations</label><br>
+      <label><input type="checkbox" name="chapter" value="Domain 8"> Domain 8: Software Development Security</label>
+    </fieldset>
+    <fieldset>
+      <legend>Practice Tests</legend>
+      <label><input type="checkbox" name="test" value="Practice Test 1"> Practice Test 1</label><br>
+      <label><input type="checkbox" name="test" value="Practice Test 2"> Practice Test 2</label><br>
+      <label><input type="checkbox" name="test" value="Practice Test 3"> Practice Test 3</label><br>
+      <label><input type="checkbox" name="test" value="Practice Test 4"> Practice Test 4</label>
+    </fieldset>
+    <fieldset>
+      <legend>Options</legend>
+      <label><input type="checkbox" name="randomise" value="yes"> Randomise Questions</label>
+    </fieldset>
+    <button type="submit">Start Quiz</button>
+  </form>
+</div>
+
+<script>
+document.getElementById('selectionForm').onsubmit = function(e) {
+  e.preventDefault();
+  // Collect selected domains and tests
+  const form = e.target;
+  const chapters = Array.from(form.querySelectorAll('input[name="chapter"]:checked')).map(cb => cb.value);
+  const tests = Array.from(form.querySelectorAll('input[name="test"]:checked')).map(cb => cb.value);
+  const randomise = form.querySelector('input[name="randomise"]:checked') !== null;
+
+  // Example: Pass these selections to your quiz logic
+  startQuiz({ chapters, tests, randomise });
+};
+
+function startQuiz(selection) {
+  // Replace this with your quiz initialisation logic
+  alert(
+    "You selected:\n" +
+    (selection.chapters.length ? "Domains: " + selection.chapters.join(', ') + "\n" : "") +
+    (selection.tests.length ? "Practice Tests: " + selection.tests.join(', ') + "\n" : "") +
+    (selection.randomise ? "Questions will be randomised." : "Questions will be in order.")
+  );
+  // Here you would filter your questions pool and launch the quiz UI
+}
+</script>
+``
