@@ -3,7 +3,7 @@
 <html lang="en-GB">
 <head>
   <meta charset="UTF-8">
-  <title>CISSP Practice Exam</title>
+  <title>CISSP Practice App</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f8f8f8; margin: 0; }
     #app { max-width: 700px; margin: 2em auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
@@ -29,7 +29,7 @@
 </head>
 <body>
 <div id="app">
-  <h1>CISSP Practice Exam</h1>
+  <h1>CISSP Practice App</h1>
   <div id="setup">
     <h2>Setup</h2>
     <label>
@@ -56,3 +56,140 @@
     <div id="timer" class="timer"></div>
     <div id="progress"></div>
     <div class="question" id="question"></div>
+    <form id="options" class="options"></form>
+    <div id="feedback"></div>
+    <button class="btn" id="nextBtn" onclick="nextQuestion()" style="display:none;">Next</button>
+    <button class="btn" id="finishBtn" onclick="finishQuiz()" style="display:none;">Finish</button>
+  </div>
+  <div id="summary" class="hidden"></div>
+</div>
+<script>
+let questions = [];
+let quizQuestions = [];
+let current = 0;
+let correct = 0;
+let userAnswers = [];
+let mode = 'study';
+let timer = null, timeLeft = 0;
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function startQuiz() {
+  mode = document.getElementById('mode').value;
+  let num = parseInt(document.getElementById('numQuestions').value, 10);
+  let chapters = document.getElementById('chapters').value
+    .split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => !isNaN(n));
+  quizQuestions = questions.filter(q => chapters.length === 0 || chapters.includes(q.chapter));
+  shuffle(quizQuestions);
+  quizQuestions = quizQuestions.slice(0, num);
+  current = 0;
+  correct = 0;
+  userAnswers = [];
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('quiz').classList.remove('hidden');
+  document.getElementById('summary').classList.add('hidden');
+  if (mode === 'test') {
+    timeLeft = num * 90; // 90 seconds per question
+    document.getElementById('timer').textContent = `Time left: ${formatTime(timeLeft)}`;
+    timer = setInterval(() => {
+      timeLeft--;
+      document.getElementById('timer').textContent = `Time left: ${formatTime(timeLeft)}`;
+      if (timeLeft <= 0) finishQuiz();
+    }, 1000);
+  } else {
+    document.getElementById('timer').textContent = '';
+  }
+  showQuestion();
+}
+
+function formatTime(sec) {
+  let m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function showQuestion() {
+  if (current >= quizQuestions.length) return finishQuiz();
+  let q = quizQuestions[current];
+  document.getElementById('progress').textContent = `Question ${current + 1} of ${quizQuestions.length}`;
+  document.getElementById('question').textContent = q.question;
+  let opts = q.options.map((opt, i) => `
+    <label>
+      <input type="radio" name="option" value="${opt[0]}" required> ${opt}
+    </label>
+  `).join('');
+  document.getElementById('options').innerHTML = opts + '<button type="submit" id="submitBtn">Submit</button>';
+  document.getElementById('feedback').innerHTML = '';
+  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('finishBtn').style.display = 'none';
+  document.getElementById('options').onsubmit = e => {
+    e.preventDefault();
+    let ans = document.querySelector('input[name="option"]:checked');
+    if (!ans) return;
+    let isCorrect = ans.value === q.correct_answer;
+    if (isCorrect) correct++;
+    userAnswers[current] = ans.value;
+    if (mode === 'study') {
+      document.getElementById('feedback').innerHTML = isCorrect
+        ? '<span class="correct">Correct!</span>'
+        : `<span class="incorrect">Incorrect.</span> <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>`;
+      document.getElementById('submitBtn').disabled = true;
+      if (current < quizQuestions.length - 1) {
+        document.getElementById('nextBtn').style.display = '';
+      } else {
+        document.getElementById('finishBtn').style.display = '';
+      }
+    } else {
+      nextQuestion();
+    }
+  };
+}
+
+function nextQuestion() {
+  current++;
+  showQuestion();
+}
+
+function finishQuiz() {
+  if (timer) clearInterval(timer);
+  document.getElementById('quiz').classList.add('hidden');
+  let html = `<h2>Results</h2>
+    <p>Score: ${correct} / ${quizQuestions.length}</p>
+    <table class="review-table">
+      <tr>
+        <th>#</th>
+        <th>Question</th>
+        <th>Your Answer</th>
+        <th>Correct Answer</th>
+        <th>Explanation</th>
+      </tr>`;
+  quizQuestions.forEach((q, i) => {
+    let userAns = userAnswers[i] || '';
+    let isCorrect = userAns === q.correct_answer;
+    html += `<tr>
+      <td>${i+1}</td>
+      <td>${q.question}</td>
+      <td class="${isCorrect ? 'correct' : 'incorrect'}">${userAns || '(none)'}</td>
+      <td>${q.correct_answer}</td>
+      <td>${q.explanation}</td>
+    </tr>`;
+  });
+  html += '</table><button class="btn" onclick="location.reload()">Restart</button>';
+  document.getElementById('summary').innerHTML = html;
+  document.getElementById('summary').classList.remove('hidden');
+}
+
+// Load questions.json
+fetch('questions.json')
+  .then(r => r.json())
+  .then(data => { questions = data; })
+  .catch(() => alert('Failed to load questions.json. Please ensure it is in the same directory and you are using a local server.'));
+</script>
+</body>
+</html>
