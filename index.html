@@ -3,252 +3,177 @@
 <html lang="en-GB">
 <head>
   <meta charset="UTF-8">
-  <title>CISSP Practice Quiz</title>
+  <title>CISSP Practice App</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 700px; margin: 2em auto; }
-    h1, h2 { text-align: center; }
-    .question { font-weight: bold; margin-bottom: 1em; }
-    .options { list-style: none; padding: 0; }
-    .options li { margin-bottom: 0.5em; }
-    .feedback { margin-top: 1em; font-weight: bold; }
-    .explanation { margin-top: 0.5em; background: #f9f9f9; padding: 1em; border-radius: 5px; }
-    .score { margin-top: 1em; font-size: 1.1em; }
+    body { font-family: Arial, sans-serif; margin: 2em; background: #f8f8f8; }
+    #app { max-width: 700px; margin: auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
+    h1, h2 { color: #2a4d69; }
+    .question { margin-bottom: 1em; }
+    .options label { display: block; margin: 0.5em 0; }
+    .explanation { background: #e8f4fa; padding: 1em; border-radius: 5px; margin-top: 1em; }
+    .correct { color: green; }
+    .incorrect { color: red; }
     .hidden { display: none; }
-    .progress { margin-bottom: 1em; }
-    .btn { padding: 0.5em 1em; font-size: 1em; }
-    fieldset { margin-bottom: 1em; }
+    .timer { font-weight: bold; color: #d7263d; }
+    .btn { background: #2a4d69; color: #fff; border: none; padding: 0.5em 1em; border-radius: 4px; cursor: pointer; margin-top: 1em; }
+    .btn:disabled { background: #ccc; }
+    .summary { margin-top: 2em; }
+    select, input[type="number"] { margin: 0.5em 0; }
   </style>
 </head>
 <body>
-  <h1>CISSP Practice Quiz</h1>
-  <div id="app"></div>
+<div id="app">
+  <h1>CISSP Practice App</h1>
+  <div id="setup">
+    <h2>Setup</h2>
+    <label>
+      Mode:
+      <select id="mode">
+        <option value="study">Study Mode (Immediate feedback)</option>
+        <option value="test">Test Mode (Timer, feedback at end)</option>
+      </select>
+    </label>
+    <br>
+    <label>
+      Number of questions:
+      <input type="number" id="numQuestions" min="1" max="100" value="10">
+    </label>
+    <br>
+    <label>
+      Chapters (comma-separated, blank for all):<br>
+      <input type="text" id="chapters" placeholder="e.g. 1,2,3">
+    </label>
+    <br>
+    <button class="btn" onclick="startQuiz()">Start</button>
+  </div>
+  <div id="quiz" class="hidden">
+    <div id="timer" class="timer"></div>
+    <div id="progress"></div>
+    <div class="question" id="question"></div>
+    <form id="options" class="options"></form>
+    <div id="feedback"></div>
+    <button class="btn" id="nextBtn" onclick="nextQuestion()" style="display:none;">Next</button>
+  </div>
+  <div id="summary" class="hidden"></div>
+</div>
+<script>
+let questions = [];
+let quizQuestions = [];
+let current = 0;
+let correct = 0;
+let userAnswers = [];
+let mode = 'study';
+let timer = null, timeLeft = 0;
 
-  <script>
-    // --- Sample Questions Data (expand this array with more extracted questions) ---
-    const questions = [
-      {
-        id: 1,
-        chapter: "Domain 1",
-        test: null,
-        question: "Alyssa is responsible for her organisation's security awareness programme. She is concerned that changes in technology may make the content outdated. What control can she put in place to protect against this risk?",
-        options: ["Gamification", "Computer-based training", "Content reviews", "Live training"],
-        correct: 2,
-        explanation: "Alyssa should use periodic content reviews to continually verify that the content in her programme meets the organisation's needs and is up-to-date based upon the evolving risk landscape. She may do this using a combination of computer-based training, live training, and gamification, but those techniques do not necessarily verify that the content is updated."
-      },
-      {
-        id: 2,
-        chapter: "Domain 1",
-        test: null,
-        question: "Gavin is creating a report for management on the results of his most recent risk assessment. In his report, he would like to identify the remaining level of risk to the organisation after adopting security controls. What term best describes this current level of risk?",
-        options: ["Inherent risk", "Residual risk", "Control risk", "Mitigated risk"],
-        correct: 1,
-        explanation: "The residual risk is the level of risk that remains after controls have been applied to mitigate risks. Inherent risk is the original risk that existed prior to the controls."
-      },
-      {
-        id: 901,
-        chapter: null,
-        test: "Practice Test 1",
-        question: "Lisa is attempting to prevent her network from being targeted by IP spoofing attacks as well as preventing her network from being the source of those attacks. Which of the following rules are best practices that Lisa should configure at her network border?",
-        options: [
-          "Block packets with internal source addresses from entering the network.",
-          "Block packets with external source addresses from leaving the network.",
-          "Block packets with public IP addresses from entering the network.",
-          "Block packets with private IP addresses from exiting the network."
-        ],
-        correct: [0,1,3], // Multiple correct answers (example)
-        explanation: "Packets with internal source addresses should never originate from outside the network, so they should be blocked from entering the network. Packets with external source addresses should never be found on the internal network, so they should be blocked from leaving the network. Private IP addresses should never be used on the Internet, so packets containing private IP addresses should be blocked from leaving the network."
-      }
-      // Add more questions here...
-    ];
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
 
-    // --- UI State ---
-    let selectedQuestions = [];
-    let currentIdx = 0;
-    let score = 0;
-    let answered = 0;
-    let randomise = false;
+function startQuiz() {
+  mode = document.getElementById('mode').value;
+  let num = parseInt(document.getElementById('numQuestions').value, 10);
+  let chapters = document.getElementById('chapters').value
+    .split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => !isNaN(n));
+  quizQuestions = questions.filter(q => chapters.length === 0 || chapters.includes(q.chapter));
+  shuffle(quizQuestions);
+  quizQuestions = quizQuestions.slice(0, num);
+  current = 0;
+  correct = 0;
+  userAnswers = [];
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('quiz').classList.remove('hidden');
+  document.getElementById('summary').classList.add('hidden');
+  if (mode === 'test') {
+    timeLeft = num * 90; // 90 seconds per question
+    document.getElementById('timer').textContent = `Time left: ${formatTime(timeLeft)}`;
+    timer = setInterval(() => {
+      timeLeft--;
+      document.getElementById('timer').textContent = `Time left: ${formatTime(timeLeft)}`;
+      if (timeLeft <= 0) finishQuiz();
+    }, 1000);
+  } else {
+    document.getElementById('timer').textContent = '';
+  }
+  showQuestion();
+}
 
-    // --- Render Selection UI ---
-    function renderSelectionUI() {
-      document.getElementById('app').innerHTML = `
-        <h2>Select Questions to Practise</h2>
-        <form id="selectionForm">
-          <fieldset>
-            <legend>Domains (Chapters)</legend>
-            <label><input type="checkbox" name="chapter" value="Domain 1"> Domain 1: Security and Risk Management</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 2"> Domain 2: Asset Security</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 3"> Domain 3: Security Architecture and Engineering</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 4"> Domain 4: Communication and Network Security</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 5"> Domain 5: Identity and Access Management</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 6"> Domain 6: Security Assessment and Testing</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 7"> Domain 7: Security Operations</label><br>
-            <label><input type="checkbox" name="chapter" value="Domain 8"> Domain 8: Software Development Security</label>
-          </fieldset>
-          <fieldset>
-            <legend>Practice Tests</legend>
-            <label><input type="checkbox" name="test" value="Practice Test 1"> Practice Test 1</label><br>
-            <label><input type="checkbox" name="test" value="Practice Test 2"> Practice Test 2</label><br>
-            <label><input type="checkbox" name="test" value="Practice Test 3"> Practice Test 3</label><br>
-            <label><input type="checkbox" name="test" value="Practice Test 4"> Practice Test 4</label>
-          </fieldset>
-          <fieldset>
-            <legend>Options</legend>
-            <label><input type="checkbox" name="randomise" value="yes"> Randomise Questions</label>
-          </fieldset>
-          <button type="submit" class="btn">Start Quiz</button>
-        </form>
+function formatTime(sec) {
+  let m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function showQuestion() {
+  if (current >= quizQuestions.length) return finishQuiz();
+  let q = quizQuestions[current];
+  document.getElementById('progress').textContent = `Question ${current + 1} of ${quizQuestions.length}`;
+  document.getElementById('question').textContent = q.question;
+  let opts = q.options.map((opt, i) => `
+    <label>
+      <input type="radio" name="option" value="${opt[0]}" required> ${opt}
+    </label>
+  `).join('');
+  document.getElementById('options').innerHTML = opts;
+  document.getElementById('feedback').innerHTML = '';
+  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('options').onsubmit = e => {
+    e.preventDefault();
+    let ans = document.querySelector('input[name="option"]:checked').value;
+    userAnswers[current] = ans;
+    if (mode === 'study') {
+      let correctAns = q.correct_answer;
+      let isCorrect = ans === correctAns;
+      if (isCorrect) correct++;
+      document.getElementById('feedback').innerHTML = `
+        <div class="${isCorrect ? 'correct' : 'incorrect'}">
+          ${isCorrect ? 'Correct!' : 'Incorrect.'}
+        </div>
+        <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>
       `;
-      document.getElementById('selectionForm').onsubmit = handleSelection;
+      document.getElementById('nextBtn').style.display = 'inline-block';
+    } else {
+      if (ans === q.correct_answer) correct++;
+      nextQuestion();
     }
+  };
+}
 
-    // --- Handle Selection ---
-    function handleSelection(e) {
-      e.preventDefault();
-      const form = e.target;
-      const chapters = Array.from(form.querySelectorAll('input[name="chapter"]:checked')).map(cb => cb.value);
-      const tests = Array.from(form.querySelectorAll('input[name="test"]:checked')).map(cb => cb.value);
-      randomise = form.querySelector('input[name="randomise"]:checked') !== null;
+function nextQuestion() {
+  current++;
+  showQuestion();
+}
 
-      // Filter questions based on selection
-      selectedQuestions = questions.filter(q =>
-        (chapters.length && q.chapter && chapters.includes(q.chapter)) ||
-        (tests.length && q.test && tests.includes(q.test))
-      );
-      // If nothing selected, use all questions
-      if (selectedQuestions.length === 0) selectedQuestions = questions.slice();
+function finishQuiz() {
+  if (timer) clearInterval(timer);
+  document.getElementById('quiz').classList.add('hidden');
+  let html = `<h2>Results</h2>
+    <p>Score: ${correct} / ${quizQuestions.length}</p>
+    <div class="summary">`;
+  quizQuestions.forEach((q, i) => {
+    let userAns = userAnswers[i] || '';
+    let isCorrect = userAns === q.correct_answer;
+    html += `<div style="margin-bottom:1em;">
+      <strong>Q${i+1}:</strong> ${q.question}<br>
+      <em>Your answer:</em> ${userAns || '(none)'}<br>
+      <em>Correct answer:</em> ${q.correct_answer}<br>
+      ${isCorrect ? '<span class="correct">Correct</span>' : '<span class="incorrect">Incorrect</span>'}
+      <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>
+    </div>`;
+  });
+  html += '</div><button class="btn" onclick="location.reload()">Restart</button>';
+  document.getElementById('summary').innerHTML = html;
+  document.getElementById('summary').classList.remove('hidden');
+}
 
-      if (randomise) shuffle(selectedQuestions);
-
-      // Reset state
-      currentIdx = 0;
-      score = 0;
-      answered = 0;
-
-      renderQuiz();
-    }
-
-    // --- Shuffle Array (Fisher-Yates) ---
-    function shuffle(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-      }
-    }
-
-    // --- Render Quiz UI ---
-    function renderQuiz() {
-      if (currentIdx >= selectedQuestions.length) {
-        renderResults();
-        return;
-      }
-      const q = selectedQuestions[currentIdx];
-      const progress = `Question ${currentIdx + 1} of ${selectedQuestions.length}`;
-      const scoreText = `Score: ${score} / ${answered}`;
-      let optionsHtml = '';
-      if (Array.isArray(q.correct)) {
-        // Multiple correct answers (checkboxes)
-        optionsHtml = q.options.map((opt, i) =>
-          `<li><label><input type="checkbox" name="option" value="${i}"> ${String.fromCharCode(65 + i)}. ${opt}</label></li>`
-        ).join('');
-      } else {
-        // Single correct answer (radio)
-        optionsHtml = q.options.map((opt, i) =>
-          `<li><button class="btn" onclick="selectAnswer(${i})">${String.fromCharCode(65 + i)}. ${opt}</button></li>`
-        ).join('');
-      }
-      document.getElementById('app').innerHTML = `
-        <div class="progress">${progress}</div>
-        <div class="question">${q.question}</div>
-        <ul class="options">${optionsHtml}</ul>
-        <div id="feedback"></div>
-        <div class="score">${scoreText}</div>
-        <button id="nextBtn" class="btn hidden">Next</button>
-      `;
-      if (Array.isArray(q.correct)) {
-        // For multiple correct, add submit button
-        document.querySelector('.options').insertAdjacentHTML('afterend',
-          `<button class="btn" id="submitMulti">Submit Answer</button>`);
-        document.getElementById('submitMulti').onclick = () => selectMultiAnswer();
-      }
-      document.getElementById('nextBtn').onclick = nextQuestion;
-    }
-
-    // --- Handle Single Answer ---
-    window.selectAnswer = function(selected) {
-      const q = selectedQuestions[currentIdx];
-      answered++;
-      let correct = false;
-      if (Array.isArray(q.correct)) {
-        // Should not happen for single answer
-      } else {
-        correct = (selected === q.correct);
-      }
-      if (correct) score++;
-      showFeedback(correct, q);
-    };
-
-    // --- Handle Multiple Answers ---
-    function selectMultiAnswer() {
-      const q = selectedQuestions[currentIdx];
-      answered++;
-      const selected = Array.from(document.querySelectorAll('input[name="option"]:checked')).map(cb => parseInt(cb.value));
-      const correctSet = new Set(q.correct);
-      const selectedSet = new Set(selected);
-      const correct = selected.length === q.correct.length && selected.every(v => correctSet.has(v));
-      if (correct) score++;
-      showFeedback(correct, q, selected);
-    }
-
-    // --- Show Feedback ---
-    function showFeedback(correct, q, selected=[]) {
-      const feedbackDiv = document.getElementById('feedback');
-      if (correct) {
-        feedbackDiv.innerHTML = `<span class="feedback" style="color:green;">Correct!</span>`;
-      } else {
-        let correctAns;
-        if (Array.isArray(q.correct)) {
-          correctAns = q.correct.map(i => String.fromCharCode(65 + i)).join(', ');
-        } else {
-          correctAns = String.fromCharCode(65 + q.correct);
-        }
-        feedbackDiv.innerHTML = `
-          <span class="feedback" style="color:red;">Incorrect.</span>
-          <div>Correct answer: <strong>${correctAns}</strong></div>
-          <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>
-        `;
-      }
-      // Disable all buttons/inputs
-      document.querySelectorAll('.options button, .options input').forEach(btn => btn.disabled = true);
-      const submitBtn = document.getElementById('submitMulti');
-      if (submitBtn) submitBtn.disabled = true;
-      document.getElementById('nextBtn').classList.remove('hidden');
-      // Update score
-      document.querySelector('.score').textContent = `Score: ${score} / ${answered}`;
-    }
-
-    // --- Next Question ---
-    function nextQuestion() {
-      currentIdx++;
-      renderQuiz();
-    }
-
-    // --- Render Results ---
-    function renderResults() {
-      const percent = Math.round((score / answered) * 100);
-      document.getElementById('app').innerHTML = `
-        <h2>Quiz Complete!</h2>
-        <div class="score">Final Score: ${score} / ${answered} (${percent}%)</div>
-        <button class="btn" onclick="restartQuiz()">Try Again</button>
-      `;
-    }
-
-    // --- Restart Quiz ---
-    window.restartQuiz = function() {
-      renderSelectionUI();
-    };
-
-    // --- Start ---
-    renderSelectionUI();
-  </script>
+// Load questions.json
+fetch('questions.json')
+  .then(r => r.json())
+  .then(data => { questions = data; })
+  .catch(() => alert('Failed to load questions.json. Please ensure it is in the same directory.'));
+</script>
 </body>
 </html>
