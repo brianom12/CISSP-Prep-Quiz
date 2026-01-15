@@ -3,10 +3,10 @@
 <html lang="en-GB">
 <head>
   <meta charset="UTF-8">
-  <title>CISSP Practice App</title>
+  <title>CISSP Practice Exam</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2em; background: #f8f8f8; }
-    #app { max-width: 700px; margin: auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
+    body { font-family: Arial, sans-serif; background: #f8f8f8; margin: 0; }
+    #app { max-width: 700px; margin: 2em auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
     h1, h2 { color: #2a4d69; }
     .question { margin-bottom: 1em; }
     .options label { display: block; margin: 0.5em 0; }
@@ -19,18 +19,24 @@
     .btn:disabled { background: #ccc; }
     .summary { margin-top: 2em; }
     select, input[type="number"] { margin: 0.5em 0; }
+    .review-table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+    .review-table th, .review-table td { border: 1px solid #ccc; padding: 0.5em; }
+    .review-table th { background: #f0f0f0; }
+    .review-table td { vertical-align: top; }
+    .review-table .correct { color: green; font-weight: bold; }
+    .review-table .incorrect { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
 <div id="app">
-  <h1>CISSP Practice App</h1>
+  <h1>CISSP Practice Exam</h1>
   <div id="setup">
     <h2>Setup</h2>
     <label>
       Mode:
       <select id="mode">
         <option value="study">Study Mode (Immediate feedback)</option>
-        <option value="test">Test Mode (Timer, feedback at end)</option>
+        <option value="test">Test Mode (Timer, review at end)</option>
       </select>
     </label>
     <br>
@@ -50,130 +56,3 @@
     <div id="timer" class="timer"></div>
     <div id="progress"></div>
     <div class="question" id="question"></div>
-    <form id="options" class="options"></form>
-    <div id="feedback"></div>
-    <button class="btn" id="nextBtn" onclick="nextQuestion()" style="display:none;">Next</button>
-  </div>
-  <div id="summary" class="hidden"></div>
-</div>
-<script>
-let questions = [];
-let quizQuestions = [];
-let current = 0;
-let correct = 0;
-let userAnswers = [];
-let mode = 'study';
-let timer = null, timeLeft = 0;
-
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-}
-
-function startQuiz() {
-  mode = document.getElementById('mode').value;
-  let num = parseInt(document.getElementById('numQuestions').value, 10);
-  let chapters = document.getElementById('chapters').value
-    .split(',')
-    .map(s => parseInt(s.trim(), 10))
-    .filter(n => !isNaN(n));
-  quizQuestions = questions.filter(q => chapters.length === 0 || chapters.includes(q.chapter));
-  shuffle(quizQuestions);
-  quizQuestions = quizQuestions.slice(0, num);
-  current = 0;
-  correct = 0;
-  userAnswers = [];
-  document.getElementById('setup').classList.add('hidden');
-  document.getElementById('quiz').classList.remove('hidden');
-  document.getElementById('summary').classList.add('hidden');
-  if (mode === 'test') {
-    timeLeft = num * 90; // 90 seconds per question
-    document.getElementById('timer').textContent = `Time left: ${formatTime(timeLeft)}`;
-    timer = setInterval(() => {
-      timeLeft--;
-      document.getElementById('timer').textContent = `Time left: ${formatTime(timeLeft)}`;
-      if (timeLeft <= 0) finishQuiz();
-    }, 1000);
-  } else {
-    document.getElementById('timer').textContent = '';
-  }
-  showQuestion();
-}
-
-function formatTime(sec) {
-  let m = Math.floor(sec / 60), s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function showQuestion() {
-  if (current >= quizQuestions.length) return finishQuiz();
-  let q = quizQuestions[current];
-  document.getElementById('progress').textContent = `Question ${current + 1} of ${quizQuestions.length}`;
-  document.getElementById('question').textContent = q.question;
-  let opts = q.options.map((opt, i) => `
-    <label>
-      <input type="radio" name="option" value="${opt[0]}" required> ${opt}
-    </label>
-  `).join('');
-  document.getElementById('options').innerHTML = opts;
-  document.getElementById('feedback').innerHTML = '';
-  document.getElementById('nextBtn').style.display = 'none';
-  document.getElementById('options').onsubmit = e => {
-    e.preventDefault();
-    let ans = document.querySelector('input[name="option"]:checked').value;
-    userAnswers[current] = ans;
-    if (mode === 'study') {
-      let correctAns = q.correct_answer;
-      let isCorrect = ans === correctAns;
-      if (isCorrect) correct++;
-      document.getElementById('feedback').innerHTML = `
-        <div class="${isCorrect ? 'correct' : 'incorrect'}">
-          ${isCorrect ? 'Correct!' : 'Incorrect.'}
-        </div>
-        <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>
-      `;
-      document.getElementById('nextBtn').style.display = 'inline-block';
-    } else {
-      if (ans === q.correct_answer) correct++;
-      nextQuestion();
-    }
-  };
-}
-
-function nextQuestion() {
-  current++;
-  showQuestion();
-}
-
-function finishQuiz() {
-  if (timer) clearInterval(timer);
-  document.getElementById('quiz').classList.add('hidden');
-  let html = `<h2>Results</h2>
-    <p>Score: ${correct} / ${quizQuestions.length}</p>
-    <div class="summary">`;
-  quizQuestions.forEach((q, i) => {
-    let userAns = userAnswers[i] || '';
-    let isCorrect = userAns === q.correct_answer;
-    html += `<div style="margin-bottom:1em;">
-      <strong>Q${i+1}:</strong> ${q.question}<br>
-      <em>Your answer:</em> ${userAns || '(none)'}<br>
-      <em>Correct answer:</em> ${q.correct_answer}<br>
-      ${isCorrect ? '<span class="correct">Correct</span>' : '<span class="incorrect">Incorrect</span>'}
-      <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>
-    </div>`;
-  });
-  html += '</div><button class="btn" onclick="location.reload()">Restart</button>';
-  document.getElementById('summary').innerHTML = html;
-  document.getElementById('summary').classList.remove('hidden');
-}
-
-// Load questions.json
-fetch('questions.json')
-  .then(r => r.json())
-  .then(data => { questions = data; })
-  .catch(() => alert('Failed to load questions.json. Please ensure it is in the same directory.'));
-</script>
-</body>
-</html>
