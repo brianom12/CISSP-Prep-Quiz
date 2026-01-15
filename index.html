@@ -8,6 +8,7 @@
     body { font-family: Arial, sans-serif; background: #f8f8f8; margin: 0; }
     #app { max-width: 700px; margin: 2em auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
     h1, h2 { color: #2a4d69; }
+    .error { color: #d7263d; font-weight: bold; margin-bottom: 1em; }
     .question { margin-bottom: 1em; }
     .options label { display: block; margin: 0.5em 0; }
     .explanation { background: #e8f4fa; padding: 1em; border-radius: 5px; margin-top: 1em; }
@@ -30,6 +31,7 @@
 <body>
 <div id="app">
   <h1>CISSP Practice App</h1>
+  <div id="error" class="error hidden"></div>
   <div id="setup">
     <h2>Setup</h2>
     <label>
@@ -72,6 +74,15 @@ let userAnswers = [];
 let mode = 'study';
 let timer = null, timeLeft = 0;
 
+function showError(msg) {
+  document.getElementById('error').textContent = msg;
+  document.getElementById('error').classList.remove('hidden');
+}
+
+function hideError() {
+  document.getElementById('error').classList.add('hidden');
+}
+
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -80,15 +91,32 @@ function shuffle(arr) {
 }
 
 function startQuiz() {
+  hideError();
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    showError("No questions loaded. Please check your questions.json file.");
+    return;
+  }
   mode = document.getElementById('mode').value;
   let num = parseInt(document.getElementById('numQuestions').value, 10);
+  if (isNaN(num) || num < 1) {
+    showError("Please enter a valid number of questions.");
+    return;
+  }
   let chapters = document.getElementById('chapters').value
     .split(',')
     .map(s => parseInt(s.trim(), 10))
     .filter(n => !isNaN(n));
   quizQuestions = questions.filter(q => chapters.length === 0 || chapters.includes(q.chapter));
+  if (quizQuestions.length === 0) {
+    showError("No questions found for the selected chapters.");
+    return;
+  }
   shuffle(quizQuestions);
   quizQuestions = quizQuestions.slice(0, num);
+  if (quizQuestions.length === 0) {
+    showError("No questions available for the selected criteria.");
+    return;
+  }
   current = 0;
   correct = 0;
   userAnswers = [];
@@ -118,27 +146,37 @@ function showQuestion() {
   if (current >= quizQuestions.length) return finishQuiz();
   let q = quizQuestions[current];
   document.getElementById('progress').textContent = `Question ${current + 1} of ${quizQuestions.length}`;
-  document.getElementById('question').textContent = q.question;
-  let opts = q.options.map((opt, i) => `
+  document.getElementById('question').textContent = q.question || "Question text missing.";
+  let opts = Array.isArray(q.options) ? q.options : [];
+  if (opts.length === 0) {
+    showError("Options missing for this question. Skipping.");
+    nextQuestion();
+    return;
+  }
+  let optsHtml = opts.map((opt, i) => `
     <label>
       <input type="radio" name="option" value="${opt[0]}" required> ${opt}
     </label>
   `).join('');
-  document.getElementById('options').innerHTML = opts + '<button type="submit" id="submitBtn">Submit</button>';
+  document.getElementById('options').innerHTML = optsHtml + '<button type="submit" id="submitBtn">Submit</button>';
   document.getElementById('feedback').innerHTML = '';
   document.getElementById('nextBtn').style.display = 'none';
   document.getElementById('finishBtn').style.display = 'none';
   document.getElementById('options').onsubmit = e => {
     e.preventDefault();
     let ans = document.querySelector('input[name="option"]:checked');
-    if (!ans) return;
+    if (!ans) {
+      showError("Please select an answer before submitting.");
+      return;
+    }
+    hideError();
     let isCorrect = ans.value === q.correct_answer;
     if (isCorrect) correct++;
     userAnswers[current] = ans.value;
     if (mode === 'study') {
       document.getElementById('feedback').innerHTML = isCorrect
         ? '<span class="correct">Correct!</span>'
-        : `<span class="incorrect">Incorrect.</span> <div class="explanation"><strong>Explanation:</strong> ${q.explanation}</div>`;
+        : `<span class="incorrect">Incorrect.</span> <div class="explanation"><strong>Explanation:</strong> ${q.explanation || "No explanation provided."}</div>`;
       document.getElementById('submitBtn').disabled = true;
       if (current < quizQuestions.length - 1) {
         document.getElementById('nextBtn').style.display = '';
@@ -174,10 +212,10 @@ function finishQuiz() {
     let isCorrect = userAns === q.correct_answer;
     html += `<tr>
       <td>${i+1}</td>
-      <td>${q.question}</td>
+      <td>${q.question || "Question text missing."}</td>
       <td class="${isCorrect ? 'correct' : 'incorrect'}">${userAns || '(none)'}</td>
-      <td>${q.correct_answer}</td>
-      <td>${q.explanation}</td>
+      <td>${q.correct_answer || '(none)'}</td>
+      <td>${q.explanation || "No explanation provided."}</td>
     </tr>`;
   });
   html += '</table><button class="btn" onclick="location.reload()">Restart</button>';
@@ -185,11 +223,23 @@ function finishQuiz() {
   document.getElementById('summary').classList.remove('hidden');
 }
 
-// Load questions.json
+// Load questions.json with error handling
 fetch('questions.json')
-  .then(r => r.json())
-  .then(data => { questions = data; })
-  .catch(() => alert('Failed to load questions.json. Please ensure it is in the same directory and you are using a local server.'));
+  .then(r => {
+    if (!r.ok) throw new Error('HTTP error ' + r.status);
+    return r.json();
+  })
+  .then(data => {
+    if (!Array.isArray(data) || data.length === 0) {
+      showError('questions.json loaded but contains no questions.');
+      return;
+    }
+    questions = data;
+    hideError();
+  })
+  .catch(err => {
+    showError('Failed to load questions.json. Please ensure it is in the same directory, is valid JSON, and you are using a local server. Error: ' + err.message);
+  });
 </script>
 </body>
 </html>
